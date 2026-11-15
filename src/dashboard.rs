@@ -152,32 +152,6 @@ fn icons() -> &'static Icons {
     })
 }
 
-/// The dashboard's icons, for the export's Tesla Mobile bar.
-pub struct IconSet {
-    pub brake_on: image::Handle,
-    pub brake_off: image::Handle,
-    pub wheel_on: image::Handle,
-    pub wheel_off: image::Handle,
-    pub accel_on: image::Handle,
-    pub accel_off: image::Handle,
-    pub blink_left: svg::Handle,
-    pub blink_right: svg::Handle,
-}
-
-pub fn icon_set() -> IconSet {
-    let i = icons();
-    IconSet {
-        brake_on: i.brake_on.clone(),
-        brake_off: i.brake_off.clone(),
-        wheel_on: i.wheel_on.clone(),
-        wheel_off: i.wheel_off.clone(),
-        accel_on: i.white.on.clone(),
-        accel_off: i.accel_off.clone(),
-        blink_left: i.blink_left.clone(),
-        blink_right: i.blink_right.clone(),
-    }
-}
-
 /// The gear's letter (P, D, R, N).
 pub fn gear_letter(g: i32) -> &'static str {
     match g {
@@ -527,6 +501,7 @@ const CHEVRON_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 /// What only the full dashboard shows.
 pub struct Full<'a, M> {
+    pub width: f32,
     /// The G-force meter's last positions, newest first.
     pub trail: &'a [(f32, f32)],
     /// Seconds since start (the dot's pulse).
@@ -623,7 +598,7 @@ pub fn full<'a, M: Clone + 'a>(d: Dash<'_>, f: Full<'_, M>) -> Element<'a, M> {
             container::Style::default()
         }
     }))
-    .center_x(120)
+    .center_x((f.width * 0.25).min(120.0))
     .center_y(Length::Fill);
 
     // Centre: blinker, gear / speed / unit / Autopilot line, blinker.
@@ -651,7 +626,9 @@ pub fn full<'a, M: Clone + 'a>(d: Dash<'_>, f: Full<'_, M>) -> Element<'a, M> {
         .spacing(16)
         .align_y(Alignment::Center);
 
-    let top = row![wheel, container(centre).center_x(Length::Fill), container(time).center_x(110)].align_y(Alignment::Center).height(108);
+    let top = row![wheel, container(centre).center_x(Length::Fill), container(time).center_x((f.width * (110.0 / 480.0)).min(110.0))]
+        .align_y(Alignment::Center)
+        .height(108);
 
     // Instruments: G-force with its two values, then the compass.
     let gx = sei.linear_acceleration_mps2_x / 9.81;

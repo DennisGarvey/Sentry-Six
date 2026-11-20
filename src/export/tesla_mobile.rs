@@ -9,18 +9,20 @@
 
 use super::overlay::{DashState, Painter, Picture};
 use crate::dashboard::{accel_percent, autopilot_words, gear_letter};
-use crate::theme::{medium, semibold, INTER};
+use crate::theme::medium;
 use iced::advanced::graphics::text::Paragraph;
 use iced::advanced::text::{self, Paragraph as _};
-use iced::widget::canvas::{self, path::Arc, Frame, Path, Stroke, Text};
-use iced::{mouse, Color, Font, Point, Radians, Rectangle, Renderer, Size, Theme, Vector};
+use iced::advanced::svg::Svg;
+use iced::widget::canvas::{self, path::Arc, Frame, Path, Text};
+use iced::widget::{image, svg};
+use iced::{mouse, Color, Font, Point, Radians, Rectangle, Renderer, Size, Theme};
 
 const BLUE: Color = Color::from_rgb8(0x0b, 0x65, 0xf6);
 const GREEN: Color = Color::from_rgb8(62, 233, 4);
 const BADGE: Color = Color::from_rgb8(0x19, 0x19, 0x19);
 const BRAKE_RED: Color = Color::from_rgb8(0xf1, 0x4c, 0x3b);
 const TURN_OFF: Color = Color::from_rgb8(0x4d, 0x4d, 0x4d);
-const MUTED: Color = Color::from_rgb8(0x60, 0x60, 0x60);
+const FONT: Font = Font::with_name("Universal Sans Text");
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SignalLight {
@@ -69,6 +71,36 @@ impl SignalFlasher {
     }
 }
 
+struct Icons {
+    brake: [image::Handle; 2],
+    accelerator: [image::Handle; 2],
+    wheel: image::Handle,
+    arrows: [svg::Handle; 2],
+}
+
+fn icons() -> &'static Icons {
+    static ICONS: std::sync::OnceLock<Icons> = std::sync::OnceLock::new();
+    ICONS.get_or_init(|| Icons {
+        brake: [
+            image::Handle::from_bytes(include_bytes!("../../assets/dashboard/tesla-mobile/brake_pedal_disabled.png").as_slice()),
+            image::Handle::from_bytes(include_bytes!("../../assets/dashboard/tesla-mobile/brake_pedal.png").as_slice()),
+        ],
+        accelerator: [
+            image::Handle::from_bytes(include_bytes!("../../assets/dashboard/tesla-mobile/accelerator_pedal_disabled.png").as_slice()),
+            image::Handle::from_bytes(include_bytes!("../../assets/dashboard/tesla-mobile/accelerator_pedal.png").as_slice()),
+        ],
+        wheel: image::Handle::from_bytes(include_bytes!("../../assets/dashboard/tesla-mobile/round_steering_wheel.png").as_slice()),
+        arrows: [
+            svg::Handle::from_memory(include_bytes!("../../assets/dashboard/tesla-mobile/turn_signal_left.svg").as_slice()),
+            svg::Handle::from_memory(include_bytes!("../../assets/dashboard/tesla-mobile/turn_signal_right.svg").as_slice()),
+        ],
+    })
+}
+
+fn icon_bounds(x: f32, y: f32, size: f32) -> Rectangle {
+    Rectangle::new(Point::new(x - size / 2.0, y - size / 2.0), Size::new(size, size))
+}
+
 fn text_width(content: &str, size: f32, font: Font) -> f32 {
     Paragraph::with_text(text::Text {
         content,
@@ -110,7 +142,7 @@ impl<M> canvas::Program<M> for Date {
     fn draw(&self, _: &(), renderer: &Renderer, _: &Theme, b: Rectangle, _: mouse::Cursor) -> Vec<canvas::Geometry> {
         let mut f = Frame::new(renderer, b.size());
         f.fill_rectangle(Point::ORIGIN, b.size(), Color::BLACK);
-        let font = medium(INTER);
+        let font = medium(FONT);
         let size = (b.height * 0.55 * self.1).min(b.height * 0.85);
         let width = text_width(&self.0, size, font);
         let scale = (b.width * 0.94 / width.max(1.0)).min(1.0);
@@ -157,8 +189,8 @@ impl<M> canvas::Program<M> for DataBar {
         let (w, h) = (b.width, b.height);
         f.fill_rectangle(Point::ORIGIN, b.size(), Color::BLACK);
         let y = h / 2.0;
-        let font = medium(INTER);
-        let emphasis = semibold(INTER);
+        let font = medium(FONT);
+        let emphasis = font;
         let text = |f: &mut Frame, content: String, x: f32, size: f32, color: Color, font: Font, align_x| {
             f.fill_text(Text {
                 content,
@@ -208,17 +240,11 @@ impl<M> canvas::Program<M> for DataBar {
         }
 
         let steering = Radians((m.steering_wheel_angle as f32).to_radians());
-        draw_icon(&mut f, Point::new(brake_x, y), diameter, |f| {
-            f.fill(&brake_pedal(), if m.brake_applied { Color::WHITE } else { MUTED });
-        });
-        draw_icon(&mut f, Point::new(accel_x, y), diameter, |f| {
-            f.fill(&accelerator_pedal(), if accel_pressed { Color::WHITE } else { MUTED });
-        });
-        draw_icon(&mut f, Point::new(steer_x, y), diameter, |f| {
-            f.rotate(steering);
-            f.stroke(&Path::circle(Point::ORIGIN, 32.0), Stroke::default().with_width(6.0).with_color(Color::WHITE));
-            f.fill(&wheel_spokes(), Color::WHITE);
-        });
+        let icons = icons();
+        f.draw_image(icon_bounds(brake_x, y, diameter * 20.0 / 24.0), canvas::Image::new(icons.brake[usize::from(m.brake_applied)].clone()));
+        f.draw_image(icon_bounds(accel_x, y, diameter * 22.0 / 24.0), canvas::Image::new(icons.accelerator[usize::from(accel_pressed)].clone()));
+        let wheel = canvas::Image::new(icons.wheel.clone()).rotation(steering);
+        f.draw_image(icon_bounds(steer_x, y, diameter * 20.0 / 24.0), wheel);
 
         let gear = gear_letter(m.gear_state);
         let gear_size = (diameter * 0.61 * value).min(diameter * 0.83);
@@ -231,10 +257,8 @@ impl<M> canvas::Program<M> for DataBar {
         };
         for (i, x) in [left_x, right_x].into_iter().enumerate() {
             let (color, opacity) = self.state.mobile_signals[i].appearance();
-            draw_icon(&mut f, Point::new(x, y), diameter, |f| {
-                f.scale_nonuniform(Vector::new(if i == 0 { -1.0 } else { 1.0 }, 1.0));
-                f.fill(&turn_arrow(), color.scale_alpha(opacity));
-            });
+            let arrow = Svg::new(icons.arrows[i].clone()).color(color).opacity(opacity);
+            f.draw_svg(icon_bounds(x, y, diameter * 16.0 / 24.0), arrow);
         }
 
         // The number and unit have matching typography at default size.
@@ -265,75 +289,6 @@ impl<M> canvas::Program<M> for DataBar {
         }
         vec![f.into_geometry()]
     }
-}
-
-// The silhouettes use the mobile export as a visual reference. Their
-// coordinate system is centered on a 100-unit badge.
-fn draw_icon(f: &mut Frame, center: Point, diameter: f32, draw: impl FnOnce(&mut Frame)) {
-    f.with_save(|f| {
-        f.translate(Vector::new(center.x, center.y));
-        f.scale(diameter / 100.0);
-        draw(f);
-    });
-}
-
-fn brake_pedal() -> Path {
-    Path::new(|p| {
-        p.move_to(Point::new(-27.0, 2.0));
-        p.quadratic_curve_to(Point::new(-28.0, -3.0), Point::new(-22.0, -4.0));
-        p.line_to(Point::new(0.0, -4.0));
-        p.line_to(Point::new(15.0, -24.0));
-        p.quadratic_curve_to(Point::new(18.0, -28.0), Point::new(22.0, -24.0));
-        p.line_to(Point::new(12.0, -3.0));
-        p.quadratic_curve_to(Point::new(16.0, 0.0), Point::new(15.0, 4.0));
-        p.line_to(Point::new(12.0, 24.0));
-        p.quadratic_curve_to(Point::new(11.0, 28.0), Point::new(7.0, 28.0));
-        p.line_to(Point::new(-20.0, 28.0));
-        p.quadratic_curve_to(Point::new(-24.0, 28.0), Point::new(-25.0, 23.0));
-        p.close();
-    })
-}
-
-fn accelerator_pedal() -> Path {
-    Path::new(|p| {
-        p.move_to(Point::new(-10.0, 28.0));
-        p.line_to(Point::new(-10.0, -12.0));
-        p.quadratic_curve_to(Point::new(-10.0, -17.0), Point::new(-4.0, -18.0));
-        p.line_to(Point::new(-2.0, -29.0));
-        p.quadratic_curve_to(Point::new(0.0, -32.0), Point::new(3.0, -28.0));
-        p.line_to(Point::new(5.0, -18.0));
-        p.quadratic_curve_to(Point::new(10.0, -17.0), Point::new(10.0, -12.0));
-        p.line_to(Point::new(10.0, 28.0));
-        p.quadratic_curve_to(Point::new(10.0, 31.0), Point::new(7.0, 31.0));
-        p.line_to(Point::new(-7.0, 31.0));
-        p.quadratic_curve_to(Point::new(-10.0, 31.0), Point::new(-10.0, 28.0));
-        p.close();
-    })
-}
-
-fn wheel_spokes() -> Path {
-    Path::new(|p| {
-        p.move_to(Point::new(-32.0, 4.0));
-        p.bezier_curve_to(Point::new(-25.0, -13.0), Point::new(25.0, -13.0), Point::new(32.0, 4.0));
-        p.line_to(Point::new(30.0, 9.0));
-        p.bezier_curve_to(Point::new(14.0, 1.0), Point::new(9.0, 15.0), Point::new(6.0, 32.0));
-        p.line_to(Point::new(-6.0, 32.0));
-        p.bezier_curve_to(Point::new(-9.0, 15.0), Point::new(-14.0, 1.0), Point::new(-30.0, 9.0));
-        p.close();
-    })
-}
-
-fn turn_arrow() -> Path {
-    Path::new(|p| {
-        p.move_to(Point::new(-30.0, -9.0));
-        p.line_to(Point::new(-11.0, -9.0));
-        p.line_to(Point::new(-11.0, -26.0));
-        p.line_to(Point::new(31.0, 0.0));
-        p.line_to(Point::new(-11.0, 26.0));
-        p.line_to(Point::new(-11.0, 9.0));
-        p.line_to(Point::new(-30.0, 9.0));
-        p.close();
-    })
 }
 
 /// The data bar, filling what it's given; `sizes`: Label Size and Value

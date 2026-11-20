@@ -3489,3 +3489,12 @@ MIT: the standard text in "Standard licence texts: MIT", above.
 zvariant_utils 4.2.0 (MIT)
 https://github.com/z-galaxy/zbus/
 MIT: the standard text in "Standard licence texts: MIT", above.
+
+
+Tesla mobile dashboard artwork and Universal Sans Text Medium
+Source: Tesla Android app 4.62.5-4740.
+Dashboard artwork rights remain with their respective owners.
+
+Copyright © 2022 Family Type Pty Ltd. All rights reserved.
+By downloading, installing and/or using this font the Licensee confirms that it has read, understood and agrees to be bound by the terms of the Family Type EULA. For additional information see https://familytype.co/#info
+http://universalsans.com

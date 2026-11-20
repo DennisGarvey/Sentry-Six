@@ -65,8 +65,9 @@ pub fn bold(f: Font) -> Font {
 
 /// Fixed-weight files: iced picks weights by file, so each weight the app
 /// uses is its own file (see assets/fonts/README.md).
-pub const FONT_FILES: [&[u8]; 6] = [
+pub const FONT_FILES: [&[u8]; 7] = [
     include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+    include_bytes!("../assets/fonts/UniversalSansText-Medium.ttf"),
     include_bytes!("../assets/fonts/Inter-Medium.ttf"),
     include_bytes!("../assets/fonts/Inter-SemiBold.ttf"),
     include_bytes!("../assets/fonts/Inter-Bold.ttf"),
